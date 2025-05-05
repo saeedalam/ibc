@@ -1,0 +1,204 @@
+# Intent-Behaviour Contract (IBC) v0.3
+metadata:
+  version: 1.0.0
+  id: password_reset_flow
+  author: "AI-assisted team"
+  last_updated: "2025-05-05"
+  extends: "base.yaml"
+
+intent: |  # One-sentence user goal
+  "User can reset password via email link within 60 seconds"
+
+business_value: |  # Why this matters to users/business
+  "Reduces support tickets by 30% and improves user retention during account recovery"
+
+metrics:                # Success criteria - quantifiable
+  functional:
+    success_rate: > 99.5
+    token_uniqueness: 100%
+  performance:
+    latency_ms: <= 60000
+    p99_response_time: <= 1500ms
+  user_experience:
+    task_completion_rate: >= 95%
+    user_satisfaction: >= 85%
+    cognitive_load_score: <= 2  # Scale 1-5
+
+constraints:            # Non-functional limits
+  security:
+    gdpr_compliant: true
+    encryption_at_rest: true
+    rate_limiting: true
+  resources:
+    max_memory_mb: 512
+    max_cpu_cores: 0.5
+  side_effect_budget: network_only  # none | disk_only | network_only | unrestricted
+  tech_stack:
+    frontend: ["React", "TypeScript"]
+    backend: ["NestJS", "TypeScript"]
+    infrastructure: ["AWS Lambda", "DynamoDB"]
+
+context:                # Knowledge for AI understanding
+  domain_terms: [
+    {"term": "reset token", "definition": "Cryptographically secure random string for one-time password reset"},
+    {"term": "link expiry", "definition": "Time period (24h) during which reset link remains valid"}
+  ]
+  examples:
+    - input: {"action": "forgot_password", "email": "user@example.com"}
+      output: {"status": "success", "message": "Password reset email sent"}
+    - input: {"token": "a1b2c3", "new_password": "SecurePass123!"}
+      output: {"status": "success", "message": "Password updated successfully"}
+  edge_cases:
+    - scenario: "Invalid email format"
+      handling: "Validate email format before attempting to send reset link"
+    - scenario: "Multiple reset requests"
+      handling: "Invalidate previous tokens when new one is generated"
+
+behaviors:        
+  - id: validate_request
+    description: "Validate user email and rate-limit requests"
+    inputs: [email]
+    outputs: [user_id, request_valid]
+    purity: pure
+    code_hints:
+      pattern: "Validator"
+      error_handling: "Return specific validation errors"
+      
+  - id: gen_token
+    description: "Generate cryptographically secure token and set expiry"
+    inputs: [user_id]
+    outputs: [token, expiry]
+    purity: pure
+    code_hints:
+      libraries: ["crypto"]
+      security: "Use CSPRNG for token generation"
+      
+  - id: store_token
+    description: "Store hashed token with user ID and expiry"
+    inputs: [user_id, token, expiry]
+    outputs: [storage_success]
+    side_effect: database
+    code_hints:
+      database: "DynamoDB with GSI on token hash"
+      
+  - id: send_email
+    description: "Send password reset email with token link"
+    inputs: [user_id, email, token]
+    outputs: [delivery_status]
+    side_effect: network
+    code_hints:
+      service: "AWS SES"
+      template: "password_reset_template"
+      tracking: "Include delivery tracking"
+
+  - id: verify_token
+    description: "Verify token validity and expiry when user clicks link"
+    inputs: [token]
+    outputs: [user_id, token_valid]
+    side_effect: database
+    code_hints:
+      validation: "Check expiry and token hash"
+
+  - id: update_password
+    description: "Update user password with new credentials"
+    inputs: [user_id, new_password]
+    outputs: [update_success]
+    side_effect: database
+    code_hints:
+      security: "Hash password with bcrypt, min 10 rounds"
+      validation: "Enforce password complexity rules"
+
+data_contracts:
+  entities:
+    - name: User
+      fields:
+        - name: id
+          type: UUID
+          primary_key: true
+        - name: email
+          type: String
+          constraints: ["unique", "email_format"]
+        - name: password_hash
+          type: String
+          sensitive: true
+    - name: PasswordReset
+      fields:
+        - name: token_hash
+          type: String
+          primary_key: true
+        - name: user_id
+          type: UUID
+          foreign_key: "User.id"
+        - name: expiry
+          type: DateTime
+          
+  shared_access:
+    - entity: User
+      fields: [id, email]
+      intents: ["password_reset", "user_login", "account_management"]
+      
+  data_lifecycle: 
+    token_retention: "24 hours"
+    audit_log_retention: "90 days"
+
+tests:
+  unit_tests:
+    - behaviour: gen_token
+      cases:
+        - scenario: "Standard generation"
+          inputs: {"user_id": "123e4567-e89b-12d3-a456-426614174000"}
+          assertions: ["token.length >= 32", "expiry > now"]
+    - behaviour: verify_token
+      cases:
+        - scenario: "Expired token"
+          inputs: {"token": "expired_token"}
+          assertions: ["token_valid == false"]
+          
+  integration_tests:
+    - scenario: "End-to-end password reset"
+      steps:
+        - action: "Request reset with valid email"
+          expected: "Email sent with valid token"
+        - action: "Click reset link and set new password"
+          expected: "Password updated, old password no longer works"
+          
+  property_tests:
+    - property: "No duplicate tokens in 1M runs"
+      implementation: "Run token generator 1M times and assert uniqueness"
+    - property: "Tokens are cryptographically strong"
+      implementation: "Statistical randomness test on 10k tokens"
+
+user_experience:
+  feedback_collection:
+    method: post_task_survey
+    questions:
+      - "How easy was it to reset your password? (1-5)"
+      - "Did you encounter any issues during the process? (Y/N)"
+    
+  accessibility:
+    wcag_level: "AA"
+    screen_reader_compatible: true
+    
+  localization:
+    supported_languages: ["en", "es", "fr"]
+    message_keys:
+      - "password_reset.email_sent"
+      - "password_reset.success"
+      - "password_reset.error"
+
+deployment:
+  rollout_strategy: "canary"
+  monitoring:
+    metrics:
+      - name: "reset_request_rate"
+        alert_threshold: "> 100/minute"
+      - name: "token_verification_failures"
+        alert_threshold: "> 5%"
+    logging:
+      level: "INFO"
+      sensitive_fields: ["email", "token"]
+  
+  circuit_breakers:
+    - service: "email_service"
+      failure_threshold: "5% in 1m"
+      recovery_strategy: "exponential_backoff"

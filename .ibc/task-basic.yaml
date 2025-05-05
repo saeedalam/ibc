@@ -1,0 +1,30 @@
+# Minimal schema (YAML)
+intent: |  # One‑sentence user goal
+  "User can reset password via email link within 60 s"
+
+metrics:                # Success criteria
+  latency_ms: <= 60000
+  p99_failure_rate: <= 0.1%
+
+constraints:            # Non‑functional limits
+  gdpr_compliant: true
+  side_effect_budget: network_only  # none | disk_only | network_only | unrestricted
+
+context:                # (optional) domain hints & examples
+  domain_terms: ["reset token", "link expiry"]
+  examples:
+    - input: "Forgot my password"
+      output: "Password reset email sent"
+
+behaviors:             # Initial DAG – may be rewritten by Planner
+  - id: gen_token
+    inputs:  [user_id]
+    outputs: [token, expiry]
+    purity: pure
+  - id: send_email
+    inputs:  [user_id, token]
+    outputs: []
+    side_effect: network
+
+tests:
+  property: "No duplicate tokens in 1 M runs"

@@ -1,0 +1,169 @@
+# User Authentication Task IBC
+metadata:
+  version: 1.0.0
+  id: user_auth
+  name: "User Authentication Service"
+  description: "JWT-based authentication system with registration and login"
+  author: "IntentFlow Team"
+  created: "2025-05-05"
+  extends: "base.yaml" # References the base.yaml file
+
+# Task-specific settings
+task:
+  priority: "high"
+  status: "in_progress"
+  feature_path: "auth" # Will be used in src/modules/{feature}
+  
+  # Additional file scope specific to this task
+  file_scope:
+    allowed:
+      - "src/modules/auth/**"
+      - "src/modules/users/**"
+    protected:
+      - "src/modules/auth/auth.constants.ts" # Requires special care
+
+# Intent - What are we trying to achieve?
+intent:
+  summary: "Create a secure user authentication system with JWT"
+  description: |
+    Implement a complete authentication system with user registration,
+    login, JWT token generation, and protected route access. The system
+    should follow security best practices and integrate with the NestJS
+    framework.
+  
+  success_criteria:
+    - "Users can register with email validation"
+    - "Users can login and receive JWT tokens"
+    - "Protected routes can validate JWT tokens"
+    - "Passwords are securely hashed"
+
+# Data models for this feature
+data:
+  models:
+    - name: "User"
+      properties:
+        - name: "id"
+          type: "string"
+          required: true
+        - name: "email"
+          type: "string"
+          required: true
+          validation: "Valid email format"
+        - name: "password"
+          type: "string"
+          required: true
+          validation: "Min 8 chars, 1 uppercase, 1 number"
+        - name: "firstName"
+          type: "string"
+          required: true
+        - name: "lastName"
+          type: "string"
+          required: true
+        - name: "isActive"
+          type: "boolean"
+          default: false
+    
+    - name: "AuthTokens"
+      properties:
+        - name: "accessToken"
+          type: "string"
+          required: true
+        - name: "refreshToken"
+          type: "string"
+          required: true
+
+# Core behaviors to implement
+behaviors:
+  - id: "register"
+    name: "Register User"
+    description: "Register a new user in the system"
+    inputs:
+      - name: "registerDto"
+        type: "{ email: string; password: string; firstName: string; lastName: string }"
+    outputs:
+      - name: "user"
+        type: "User (without password)"
+    steps:
+      - "Validate input data format"
+      - "Check if email already exists"
+      - "Hash password using bcrypt"
+      - "Create and save new user"
+      - "Send welcome email (optional)"
+      - "Return created user without password"
+  
+  - id: "login"
+    name: "Login User"
+    description: "Authenticate user and generate tokens"
+    inputs:
+      - name: "loginDto"
+        type: "{ email: string; password: string }"
+    outputs:
+      - name: "tokens"
+        type: "AuthTokens"
+    steps:
+      - "Find user by email"
+      - "Compare password hash"
+      - "Generate JWT access and refresh tokens"
+      - "Return tokens"
+  
+  - id: "validate"
+    name: "Validate Token"
+    description: "Validate JWT token and return user info"
+    inputs:
+      - name: "token"
+        type: "string"
+    outputs:
+      - name: "user"
+        type: "User (without password)"
+    steps:
+      - "Verify JWT signature"
+      - "Extract user ID from payload"
+      - "Fetch user from database"
+      - "Return user without password"
+
+# Constraints that must be followed
+constraints:
+  security:
+    - "Store only hashed passwords using bcrypt with salt rounds ≥ 10"
+    - "JWT tokens must expire (access: 15min, refresh: 7 days)"
+    - "Implement rate limiting for login attempts"
+  
+  performance:
+    - "Login response time < 300ms for 99% of requests"
+    - "Registration should complete within 500ms"
+
+# Implementation hints for the AI
+implementation:
+  dependencies:
+    - "@nestjs/jwt"
+    - "@nestjs/passport"
+    - "passport-jwt"
+    - "bcrypt"
+    - "class-validator"
+  
+  files_to_create:
+    - "src/modules/auth/auth.module.ts"
+    - "src/modules/auth/auth.service.ts"
+    - "src/modules/auth/auth.controller.ts"
+    - "src/modules/auth/strategies/jwt.strategy.ts"
+    - "src/modules/auth/guards/jwt-auth.guard.ts"
+    - "src/modules/auth/dto/register.dto.ts"
+    - "src/modules/auth/dto/login.dto.ts"
+    - "src/modules/users/users.module.ts"
+    - "src/modules/users/users.service.ts"
+    - "src/modules/users/entities/user.entity.ts"
+
+# Tests that should be created
+tests:
+  unit:
+    - "AuthService should register users with valid data"
+    - "AuthService should reject registration with existing email"
+    - "AuthService should authenticate valid credentials"
+    - "AuthService should reject invalid credentials"
+    - "JwtStrategy should extract and validate user from token"
+  
+  e2e:
+    - "POST /auth/register should create new user"
+    - "POST /auth/login should return tokens"
+    - "GET /auth/profile should return user data when authenticated"
+    - "GET /auth/profile should reject unauthenticated request" 

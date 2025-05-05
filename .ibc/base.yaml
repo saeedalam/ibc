@@ -1,0 +1,76 @@
+# Base IBC Configuration
+metadata:
+  version: 1.0.0
+  id: base
+  description: "Base configuration for all IBCs"
+  author: "IntentFlow Team"
+  last_updated: "2025-05-05"
+
+# Project-level settings
+project:
+  # Primary languages and frameworks
+  tech_stack:
+    languages:
+      - name: "TypeScript"
+        version: "4.9+"
+    frameworks:
+      - name: "NestJS"
+        version: "9.x"
+
+  # Global code conventions
+  code_conventions:
+    naming:
+      files: "kebab-case"
+      classes: "PascalCase"
+      interfaces: "PascalCase"
+      types: "PascalCase"
+      functions: "camelCase"
+      variables: "camelCase"
+      constants: "UPPER_SNAKE_CASE"
+    formatting:
+      indentation: 2
+      max_line_length: 100
+      quotes: "single"
+      semicolons: true
+
+  # Project structure
+  structure:
+    api:
+      - "src/modules/{feature}/controllers"
+      - "src/modules/{feature}/services"
+      - "src/modules/{feature}/dto"
+      - "src/modules/{feature}/entities"
+      - "src/modules/{feature}/*.module.ts"
+    shared:
+      - "src/common/interfaces"
+      - "src/common/types"
+      - "src/common/utils"
+      - "src/common/decorators"
+
+# Global file scope boundaries
+file_scope:
+  # Allowed paths for AI to modify
+  allowed:
+    - "src/**/*.ts"
+    - "test/**/*.ts"
+    - "docs/**/*.md"
+    
+  # Forbidden paths AI should never touch
+  forbidden:
+    - "node_modules/**"
+    - ".env*"
+    - "dist/**"
+    - "build/**"
+    - "*.lock"
+
+# Default error handling approach
+error_handling:
+  strategy: "Typed exceptions with custom error classes"
+  logging: "Structured JSON logs with correlation IDs"
+  validation: "Use class-validator for DTO validation"
+
+# Default testing approach
+testing:
+  unit: "Jest with clear arrange-act-assert pattern"
+  e2e: "Supertest for API endpoint testing"
+  coverage: "Maintain at least 80% coverage" 

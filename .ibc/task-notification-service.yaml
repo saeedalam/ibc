@@ -1,0 +1,247 @@
+# Notification Service Task IBC
+metadata:
+  version: 1.0.0
+  id: notification_service
+  name: "Email Notification Service"
+  description: "Service that reads messages from Kafka and sends email notifications"
+  author: "IntentFlow Team"
+  created: "2025-05-05"
+  extends: "base.yaml"
+
+# Task-specific settings
+task:
+  priority: "medium"
+  status: "in_progress"
+  feature_path: "notifications"
+  
+  file_scope:
+    allowed:
+      - "src/modules/notifications/**"
+      - "src/modules/messaging/**"
+
+# Intent - What we're trying to achieve
+intent:
+  summary: "Create a service to send email notifications for Kafka events"
+  description: |
+    Implement a notification service that consumes messages from a Kafka topic,
+    processes them, and sends appropriate email notifications to users. The service
+    should be resilient to failures, track delivery status, and support different
+    notification templates.
+  
+  success_criteria:
+    - "Successfully consumes messages from Kafka topics"
+    - "Converts messages to appropriate email notifications"
+    - "Delivers emails reliably to recipients"
+    - "Handles failures gracefully with retries"
+    - "Records notification status for auditing"
+
+# Data models for this feature
+data:
+  models:
+    - name: "KafkaMessage"
+      properties:
+        - name: "id"
+          type: "string"
+          required: true
+          description: "Unique message identifier"
+        - name: "type"
+          type: "string"
+          required: true
+          description: "Type of notification (e.g., 'order_confirmation', 'password_reset')"
+        - name: "timestamp"
+          type: "Date"
+          required: true
+          description: "When the event occurred"
+        - name: "recipient"
+          type: "string"
+          required: true
+          description: "Email address of the recipient"
+        - name: "data"
+          type: "Record<string, any>"
+          required: true
+          description: "Dynamic data payload for notification template"
+    
+    - name: "EmailNotification"
+      properties:
+        - name: "id"
+          type: "string"
+          required: true
+          description: "Unique notification identifier"
+        - name: "messageId"
+          type: "string"
+          required: true
+          description: "Reference to original message ID"
+        - name: "recipient"
+          type: "string"
+          required: true
+          description: "Email address of the recipient"
+        - name: "subject"
+          type: "string"
+          required: true
+          description: "Email subject line"
+        - name: "body"
+          type: "string"
+          required: true
+          description: "HTML content of the email"
+        - name: "status"
+          type: "enum"
+          values: ["PENDING", "SENT", "FAILED", "DELIVERED"]
+          required: true
+          description: "Current status of the notification"
+        - name: "sentAt"
+          type: "Date"
+          required: false
+          description: "When the email was sent"
+        - name: "failureReason"
+          type: "string"
+          required: false
+          description: "Reason for failure if status is FAILED"
+        - name: "retryCount"
+          type: "number"
+          default: 0
+          description: "Number of delivery attempts"
+
+# Core behaviors to implement
+behaviors:
+  - id: "consume_messages"
+    name: "Consume Kafka Messages"
+    description: "Listen to Kafka topics and consume notification messages"
+    inputs:
+      - name: "topicName"
+        type: "string"
+        description: "Kafka topic to consume from"
+    outputs:
+      - name: "message"
+        type: "KafkaMessage"
+        description: "Parsed message from Kafka"
+    steps:
+      - "Set up Kafka consumer for the specified topic"
+      - "Subscribe to the topic and poll for messages"
+      - "Deserialize and validate incoming messages"
+      - "Forward valid messages for processing"
+      - "Acknowledge successful consumption"
+  
+  - id: "generate_email"
+    name: "Generate Email Content"
+    description: "Transform a Kafka message into an email notification"
+    inputs:
+      - name: "message"
+        type: "KafkaMessage"
+    outputs:
+      - name: "emailNotification"
+        type: "EmailNotification"
+    steps:
+      - "Determine the correct email template based on message type"
+      - "Apply message data to the template"
+      - "Generate email subject and body"
+      - "Create EmailNotification record with PENDING status"
+      - "Save notification to database for tracking"
+  
+  - id: "send_email"
+    name: "Send Email"
+    description: "Send the email notification to the recipient"
+    inputs:
+      - name: "emailNotification" 
+        type: "EmailNotification"
+    outputs:
+      - name: "updatedNotification"
+        type: "EmailNotification"
+    steps:
+      - "Connect to SMTP server"
+      - "Send email to recipient"
+      - "Update notification status to SENT or FAILED"
+      - "Record sent timestamp or failure reason"
+      - "Implement retry logic for failed deliveries"
+      - "Update notification record in database"
+
+# Constraints that must be followed
+constraints:
+  reliability:
+    - "Implement at-least-once delivery semantics"
+    - "Retry failed email sends up to 3 times with exponential backoff"
+    - "Maintain a dead-letter queue for undeliverable messages"
+  
+  performance:
+    - "Process at least 50 messages per second"
+    - "Email sending should not block message consumption"
+  
+  security:
+    - "Do not log sensitive user data or email contents"
+    - "Use TLS for SMTP connections"
+    - "Validate email addresses before sending"
+
+# Implementation hints for the AI
+implementation:
+  dependencies:
+    - "@nestjs/microservices"
+    - "kafkajs"
+    - "nodemailer"
+    - "handlebars"
+    - "class-validator"
+  
+  kafka_config:
+    brokers: ["kafka:9092"]
+    group_id: "notification-service"
+    topics:
+      - "user-notifications"
+      - "system-notifications"
+  
+  files_to_create:
+    - "src/modules/notifications/notifications.module.ts"
+    - "src/modules/notifications/notifications.service.ts"
+    - "src/modules/notifications/templates/order-confirmation.hbs"
+    - "src/modules/notifications/templates/password-reset.hbs"
+    - "src/modules/notifications/entities/email-notification.entity.ts"
+    - "src/modules/messaging/messaging.module.ts"
+    - "src/modules/messaging/kafka.service.ts"
+    - "src/modules/messaging/interfaces/kafka-message.interface.ts"
+
+# Tests that should be created
+tests:
+  unit:
+    - "KafkaService should consume messages from configured topics"
+    - "NotificationsService should convert messages to correct email format"
+    - "NotificationsService should use correct template based on message type"
+    - "NotificationsService should retry failed email deliveries"
+    - "NotificationsService should update notification status correctly"
+  
+  integration:
+    - "End-to-end message consumption to email sending flow"
+    - "Handling of malformed messages"
+    - "Delivery retry mechanism works correctly"
+    - "Dead-letter handling for undeliverable messages"
+
+# Example message formats
+examples:
+  - type: "order_confirmation"
+    payload: |
+      {
+        "id": "msg-123456",
+        "type": "order_confirmation",
+        "timestamp": "2023-10-30T14:30:00Z",
+        "recipient": "customer@example.com",
+        "data": {
+          "orderNumber": "ORD-9876",
+          "customerName": "Jane Smith",
+          "items": [
+            { "name": "Product A", "quantity": 2, "price": 29.99 },
+            { "name": "Product B", "quantity": 1, "price": 49.99 }
+          ],
+          "total": 109.97,
+          "shippingAddress": "123 Main St, Anytown, AN 12345"
+        }
+      }
+  
+  - type: "password_reset"
+    payload: |
+      {
+        "id": "msg-654321",
+        "type": "password_reset", 
+        "timestamp": "2023-10-30T15:45:00Z",
+        "recipient": "user@example.com",
+        "data": {
+          "userName": "John Doe",
+          "resetLink": "https://example.com/reset?token=abc123def456",
+          "expiresIn": "24 hours"
+        }
+      } 
