@@ -92,5 +92,3 @@ If you have ideas or want to swap war stories, ping me on LinkedIn – always ke
 
 *LLMs excel at code generation but need guard-rails.*  A minimal pair of YAML files – one global, one per feature – gave me clearer prompts, more predictable output, and fewer "why did it touch that file?!" moments.  
 **Not a silver bullet, but a useful pattern** worth trying if you feel your prompts are spiralling out of control.
-
-*Happy coding – may your AI stay on the rails!* 
